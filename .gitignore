@@ -1,9 +1,9 @@
-#IDE
+# IDE
 .idea
 
-#build
-testOne
+# runtime
+testOne*
 .testOne
 
-#go
+# go
 go.sum

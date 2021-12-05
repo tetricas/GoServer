@@ -1,0 +1,9 @@
+#IDE
+.idea
+
+#build
+testOne
+.testOne
+
+#go
+go.sum

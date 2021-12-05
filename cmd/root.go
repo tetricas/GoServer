@@ -2,16 +2,23 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/jmoiron/sqlx"
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"io/ioutil"
+	"log"
 	"os"
-	"sort"
+	"path/filepath"
 	"strings"
 )
 
 var (
-	cfgFile   string
-	container []string
+	cfgFile    string
+	db         *sqlx.DB
+	dataInsert = `INSERT INTO container (data) VALUES (?)`
+	dataDelete = `DELETE FROM container WHERE data = (?)`
+	dataSelect = `SELECT data FROM container`
 
 	rootCmd = &cobra.Command{
 		Use:   "testOne",
@@ -24,7 +31,7 @@ var (
 		Long:  "Init DB connection, sync time, check the weather...",
 		Run: func(cmd *cobra.Command, args []string) {
 			viper.Set("innited", true)
-			viper.WriteConfig()
+			_ = viper.WriteConfig()
 		},
 	}
 	addCmd = &cobra.Command{
@@ -36,24 +43,27 @@ var (
 			if !checkInitialization() {
 				return
 			}
-			container = append(container, args...)
+			for _, element := range args {
+				tx := db.MustBegin()
+				tx.MustExec(dataInsert, element)
+				_ = tx.Commit()
+			}
 		},
 	}
 	removeCmd = &cobra.Command{
 		Use:   "remove [data]",
 		Short: "Remove data from container",
 		Long:  "Remove additional components from storing data type...",
-		Args:  cobra.MaximumNArgs(1),
+		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			if !checkInitialization() {
 				return
 			}
-			idx := sort.Search(len(container), func(i int) bool {
-				return container[i] == args[0]
-			})
-			container[idx] = container[len(container)-1]
-			container[len(container)-1] = ""
-			container = container[:len(container)-1]
+			for _, element := range args {
+				tx := db.MustBegin()
+				tx.MustExec(dataDelete, element)
+				_ = tx.Commit()
+			}
 		},
 	}
 	listCmd = &cobra.Command{
@@ -63,6 +73,11 @@ var (
 		Run: func(cmd *cobra.Command, args []string) {
 			if !checkInitialization() {
 				return
+			}
+			var container []string
+			err := db.Select(&container, dataSelect)
+			if err != nil {
+				log.Println(err)
 			}
 			fmt.Println("Data: " + strings.Join(container, " "))
 		},
@@ -75,10 +90,11 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize(initConfig)
+	connectToDB()
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.cobra.yaml)")
 	rootCmd.Flags().Bool("viper", true, "use Viper for configuration")
-	viper.BindPFlag("useViper", rootCmd.Flags().Lookup("viper"))
+	_ = viper.BindPFlag("useViper", rootCmd.Flags().Lookup("viper"))
 
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(addCmd)
@@ -96,7 +112,7 @@ func initConfig() {
 	}
 
 	if err := viper.ReadInConfig(); err == nil {
-		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
+		_, _ = fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
 	}
 }
 
@@ -106,4 +122,12 @@ func checkInitialization() bool {
 		return false
 	}
 	return true
+}
+
+func connectToDB() {
+	db, _ = sqlx.Connect("sqlite3", "testOne.db")
+	path := filepath.Join("db", "create_db.sql")
+	file, _ := ioutil.ReadFile(path)
+	schema := string(file)
+	db.MustExec(schema)
 }

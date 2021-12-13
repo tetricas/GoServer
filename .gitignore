@@ -7,3 +7,6 @@ testOne*
 
 # go
 go.sum
+
+# other
+.DS_Store

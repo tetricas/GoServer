@@ -1,2 +1,4 @@
-CREATE TABLE IF NOT EXISTS container (
-    data text);
+CREATE TABLE IF NOT EXISTS users (
+    name    text,
+    email   text,
+    isAdmin boolean);

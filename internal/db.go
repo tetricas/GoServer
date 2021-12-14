@@ -11,8 +11,8 @@ var (
 	db *sqlx.DB
 
 	dataInsert = `INSERT INTO users (name, email, isAdmin) VALUES (:name, :email, :isAdmin)`
-	/*dataDelete = `DELETE FROM container WHERE data = (?)`
-	dataSelect = `SELECT data FROM container`*/
+	dataDelete = `DELETE FROM users WHERE email = (?)`
+	dataSelect = `SELECT * FROM users WHERE email = (?)`
 )
 
 type UserInternal struct {
@@ -36,6 +36,24 @@ func AddUserToDB(user *UserInternal) {
 		log.Println(err)
 		return
 	}
+	_ = tx.Commit()
+}
 
+func GetUserFromDB(email string) (user *UserInternal) {
+	tx := db.MustBegin()
+	user = &UserInternal{}
+	err := db.Get(user, dataSelect, email)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	_ = tx.Commit()
+
+	return user
+}
+
+func DeleteUserFromDB(email string) {
+	tx := db.MustBegin()
+	tx.MustExec(dataDelete, email)
 	_ = tx.Commit()
 }

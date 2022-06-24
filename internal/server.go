@@ -14,7 +14,7 @@ func Start(port string) {
 	})
 	e.POST("/user", newUser)
 	e.GET("/user/:email", getUser)
-	e.POST("/delete-user/:email", deleteUser)
+	e.POST("/user/:email", deleteUser)
 	e.Logger.Fatal(e.Start(":" + port))
 }
 
@@ -51,12 +51,15 @@ func newUser(c echo.Context) (err error) {
 	}
 	AddUserToDB(&user)
 
-	return c.JSON(http.StatusOK, u)
+	return c.JSON(http.StatusCreated, u)
 }
 
 func getUser(c echo.Context) (err error) {
 	email := c.Param("email")
 	user := GetUserFromDB(email)
+	if user == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "user not found")
+	}
 
 	return c.String(http.StatusOK, fmt.Sprintf("{name: %s, email: %s}", user.Name, user.Email))
 }

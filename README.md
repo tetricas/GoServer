@@ -1,1 +1,1 @@
-Training project for practising go, backend and related tools.
+Training project for go practice, backend and related tools.

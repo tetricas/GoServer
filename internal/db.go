@@ -10,7 +10,7 @@ import (
 var (
 	db *sqlx.DB
 
-	dataInsert = `INSERT INTO users (name, email, isAdmin) VALUES (:name, :email, :isAdmin)`
+	dataInsert = `INSERT INTO users (name, email, secret, isAdmin) VALUES (:name, :email, :secret, :isAdmin)`
 	dataDelete = `DELETE FROM users WHERE email = (?)`
 	dataSelect = `SELECT * FROM users WHERE email = (?)`
 )
@@ -18,6 +18,7 @@ var (
 type UserInternal struct {
 	Name    string `db:"name"`
 	Email   string `db:"email"`
+	Secret  string `db:"secret"`
 	IsAdmin bool   `db:"isAdmin"`
 }
 

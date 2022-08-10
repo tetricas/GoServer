@@ -5,6 +5,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"golang.org/x/crypto/bcrypt"
 	"log"
 	"os"
 	"strconv"
@@ -37,12 +38,34 @@ var (
 			port = args[0]
 			i, err := strconv.Atoi(args[0])
 			if err != nil || i > 9999 || i < 1 {
-				fmt.Println("Incorrect input")
+				fmt.Println("Incorrect input: port")
 				log.Println(err)
 				return
 			}
 			viper.Set("port", port)
 			_ = viper.WriteConfig()
+		},
+	}
+	setAdminCmd = &cobra.Command{
+		Use:   "admin",
+		Short: "Set admin",
+		Long:  "Set administrator",
+		Args:  cobra.MaximumNArgs(2),
+		Run: func(cmd *cobra.Command, args []string) {
+			username := args[0]
+			password := args[1]
+			hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+			if err != nil {
+				panic(err)
+			}
+
+			user := internal.UserInternal{
+				Name:    username,
+				Email:   username,
+				Secret:  string(hashedPassword),
+				IsAdmin: true,
+			}
+			internal.AddUserToDB(&user)
 		},
 	}
 )
@@ -61,6 +84,7 @@ func init() {
 
 	rootCmd.AddCommand(startCmd)
 	rootCmd.AddCommand(portCmd)
+	rootCmd.AddCommand(setAdminCmd)
 }
 
 func initConfig() {

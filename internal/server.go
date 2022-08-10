@@ -4,24 +4,31 @@ import (
 	"fmt"
 	"github.com/go-playground/validator"
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
+	"golang.org/x/crypto/bcrypt"
 	"net/http"
 )
 
 func Start(port string) {
 	e := echo.New()
+	e.Validator = &CustomValidator{validator: validator.New()}
 	e.GET("/", func(c echo.Context) error {
 		return c.String(http.StatusOK, "Hello, World!")
 	})
-	e.POST("/user", newUser)
-	e.GET("/user/:email", getUser)
-	e.POST("/user/:email", deleteUser)
+	admin := e.Group("/user")
+	admin.POST("/", newUser)
+	admin.GET("/:email", getUser)
+	admin.POST("/:email", deleteUser)
+	admin.Use(middleware.BasicAuth(login))
+
 	e.Logger.Fatal(e.Start(":" + port))
 }
 
 type (
 	User struct {
-		Name  string `json:"name"  form:"name"  query:"name"  validate:"required"`
-		Email string `json:"email" form:"email" query:"email" validate:"required,email"`
+		Name     string `json:"name"  form:"name"  query:"name"  validate:"required"`
+		Email    string `json:"email" form:"email" query:"email" validate:"required,email"`
+		Password string `json:"password" form:"password" query:"password" validate:"required"`
 	}
 	CustomValidator struct {
 		validator *validator.Validate
@@ -44,9 +51,15 @@ func newUser(c echo.Context) (err error) {
 		return err
 	}
 
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(u.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError)
+	}
+
 	user := UserInternal{
 		Name:    u.Name,
 		Email:   u.Email,
+		Secret:  string(hashedPassword),
 		IsAdmin: false,
 	}
 	AddUserToDB(&user)
@@ -69,4 +82,18 @@ func deleteUser(c echo.Context) (err error) {
 	DeleteUserFromDB(email)
 
 	return c.String(http.StatusOK, email)
+}
+
+func login(username, password string, c echo.Context) (bool, error) {
+	user := GetUserFromDB(username)
+	if user == nil {
+		return false, nil
+	}
+
+	err := bcrypt.CompareHashAndPassword([]byte(user.Secret), []byte(password))
+	if err != nil {
+		return false, nil
+	}
+
+	return true, nil
 }

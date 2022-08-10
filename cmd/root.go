@@ -2,84 +2,70 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"io/ioutil"
+	"golang.org/x/crypto/bcrypt"
 	"log"
 	"os"
-	"path/filepath"
-	"strings"
+	"strconv"
+	"testOne/internal"
 )
 
 var (
-	cfgFile    string
-	db         *sqlx.DB
-	dataInsert = `INSERT INTO container (data) VALUES (?)`
-	dataDelete = `DELETE FROM container WHERE data = (?)`
-	dataSelect = `SELECT data FROM container`
+	cfgFile string
+	port    string
 
 	rootCmd = &cobra.Command{
 		Use:   "testOne",
 		Short: "Some test exercises to learn new libs.",
 		Long:  "A long time ago in a galaxy far, far away...",
 	}
-	initCmd = &cobra.Command{
-		Use:   "init",
+	startCmd = &cobra.Command{
+		Use:   "start",
 		Short: "Service initialization",
 		Long:  "Init DB connection, sync time, check the weather...",
 		Run: func(cmd *cobra.Command, args []string) {
-			viper.Set("innited", true)
+			internal.Start(port)
+		},
+	}
+	portCmd = &cobra.Command{
+		Use:   "port",
+		Short: "Set port",
+		Long:  "Set port where server will listen",
+		Args:  cobra.MaximumNArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			port = args[0]
+			i, err := strconv.Atoi(args[0])
+			if err != nil || i > 9999 || i < 1 {
+				fmt.Println("Incorrect input: port")
+				log.Println(err)
+				return
+			}
+			viper.Set("port", port)
 			_ = viper.WriteConfig()
 		},
 	}
-	addCmd = &cobra.Command{
-		Use:   "add [data]",
-		Short: "Add data to container",
-		Long:  "Add additional components to storing data type...",
-		Args:  cobra.MinimumNArgs(1),
+	setAdminCmd = &cobra.Command{
+		Use:   "admin",
+		Short: "Set admin",
+		Long:  "Set administrator",
+		Args:  cobra.MaximumNArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
-			if !checkInitialization() {
-				return
-			}
-			for _, element := range args {
-				tx := db.MustBegin()
-				tx.MustExec(dataInsert, element)
-				_ = tx.Commit()
-			}
-		},
-	}
-	removeCmd = &cobra.Command{
-		Use:   "remove [data]",
-		Short: "Remove data from container",
-		Long:  "Remove additional components from storing data type...",
-		Args:  cobra.MinimumNArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
-			if !checkInitialization() {
-				return
-			}
-			for _, element := range args {
-				tx := db.MustBegin()
-				tx.MustExec(dataDelete, element)
-				_ = tx.Commit()
-			}
-		},
-	}
-	listCmd = &cobra.Command{
-		Use:   "list",
-		Short: "List all container data",
-		Long:  "List all additional data from storing data type...",
-		Run: func(cmd *cobra.Command, args []string) {
-			if !checkInitialization() {
-				return
-			}
-			var container []string
-			err := db.Select(&container, dataSelect)
+			username := args[0]
+			password := args[1]
+			hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 			if err != nil {
-				log.Println(err)
+				panic(err)
 			}
-			fmt.Println("Data: " + strings.Join(container, " "))
+
+			user := internal.UserInternal{
+				Name:    username,
+				Email:   username,
+				Secret:  string(hashedPassword),
+				IsAdmin: true,
+			}
+			internal.AddUserToDB(&user)
 		},
 	}
 )
@@ -90,16 +76,15 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize(initConfig)
-	connectToDB()
+	internal.ConnectToDB()
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.cobra.yaml)")
-	rootCmd.Flags().Bool("viper", true, "use Viper for configuration")
-	_ = viper.BindPFlag("useViper", rootCmd.Flags().Lookup("viper"))
+	startCmd.PersistentFlags().StringVarP(&port, "port", "p", "1232", "port where server will listen")
+	_ = viper.BindPFlag("port", rootCmd.PersistentFlags().Lookup("port"))
 
-	rootCmd.AddCommand(initCmd)
-	rootCmd.AddCommand(addCmd)
-	rootCmd.AddCommand(removeCmd)
-	rootCmd.AddCommand(listCmd)
+	rootCmd.AddCommand(startCmd)
+	rootCmd.AddCommand(portCmd)
+	rootCmd.AddCommand(setAdminCmd)
 }
 
 func initConfig() {
@@ -114,20 +99,4 @@ func initConfig() {
 	if err := viper.ReadInConfig(); err == nil {
 		_, _ = fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
 	}
-}
-
-func checkInitialization() bool {
-	if !viper.GetBool("innited") {
-		fmt.Println("Go fuck yourself")
-		return false
-	}
-	return true
-}
-
-func connectToDB() {
-	db, _ = sqlx.Connect("sqlite3", "testOne.db")
-	path := filepath.Join("db", "create_db.sql")
-	file, _ := ioutil.ReadFile(path)
-	schema := string(file)
-	db.MustExec(schema)
 }
